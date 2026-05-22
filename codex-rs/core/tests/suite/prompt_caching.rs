@@ -153,6 +153,7 @@ async fn prompt_tools_are_consistent_across_requests() -> anyhow::Result<()> {
             }],
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
+            mcp_meta_by_server: None,
             thread_settings: Default::default(),
         })
         .await?;
@@ -167,6 +168,7 @@ async fn prompt_tools_are_consistent_across_requests() -> anyhow::Result<()> {
             }],
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
+            mcp_meta_by_server: None,
             thread_settings: Default::default(),
         })
         .await?;
@@ -247,6 +249,7 @@ async fn gpt_5_tools_without_apply_patch_append_apply_patch_instructions() -> an
             }],
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
+            mcp_meta_by_server: None,
             thread_settings: Default::default(),
         })
         .await?;
@@ -261,6 +264,7 @@ async fn gpt_5_tools_without_apply_patch_append_apply_patch_instructions() -> an
             }],
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
+            mcp_meta_by_server: None,
             thread_settings: Default::default(),
         })
         .await?;
@@ -326,6 +330,7 @@ async fn prefixes_context_and_instructions_once_and_consistently_across_requests
             }],
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
+            mcp_meta_by_server: None,
             thread_settings: Default::default(),
         })
         .await?;
@@ -340,6 +345,7 @@ async fn prefixes_context_and_instructions_once_and_consistently_across_requests
             }],
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
+            mcp_meta_by_server: None,
             thread_settings: Default::default(),
         })
         .await?;
@@ -423,6 +429,7 @@ async fn overrides_turn_context_but_keeps_cached_prefix_and_key_constant() -> an
             }],
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
+            mcp_meta_by_server: None,
             thread_settings: Default::default(),
         })
         .await?;
@@ -461,6 +468,7 @@ async fn overrides_turn_context_but_keeps_cached_prefix_and_key_constant() -> an
             }],
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
+            mcp_meta_by_server: None,
             thread_settings: Default::default(),
         })
         .await?;
@@ -542,6 +550,7 @@ async fn override_before_first_turn_emits_environment_context() -> anyhow::Resul
             }],
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
+            mcp_meta_by_server: None,
             thread_settings: Default::default(),
         })
         .await?;
@@ -696,6 +705,7 @@ async fn per_turn_overrides_keep_cached_prefix_and_key_constant() -> anyhow::Res
             }],
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
+            mcp_meta_by_server: None,
             thread_settings: Default::default(),
         })
         .await?;
@@ -721,6 +731,7 @@ async fn per_turn_overrides_keep_cached_prefix_and_key_constant() -> anyhow::Res
             environments: None,
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
+            mcp_meta_by_server: None,
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
                 cwd: Some(new_cwd.path().to_path_buf()),
                 approval_policy: Some(AskForApproval::Never),
@@ -835,6 +846,7 @@ async fn send_user_turn_with_no_changes_does_not_send_environment_context() -> a
             environments: None,
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
+            mcp_meta_by_server: None,
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
                 cwd: Some(default_cwd.to_path_buf()),
                 approval_policy: Some(default_approval_policy),
@@ -863,6 +875,7 @@ async fn send_user_turn_with_no_changes_does_not_send_environment_context() -> a
             environments: None,
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
+            mcp_meta_by_server: None,
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
                 cwd: Some(default_cwd.to_path_buf()),
                 approval_policy: Some(default_approval_policy),
@@ -974,6 +987,7 @@ async fn send_user_turn_with_changes_sends_environment_context() -> anyhow::Resu
             environments: None,
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
+            mcp_meta_by_server: None,
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
                 cwd: Some(default_cwd.to_path_buf()),
                 approval_policy: Some(default_approval_policy),
@@ -1004,6 +1018,7 @@ async fn send_user_turn_with_changes_sends_environment_context() -> anyhow::Resu
             environments: None,
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
+            mcp_meta_by_server: None,
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
                 cwd: Some(default_cwd.to_path_buf()),
                 approval_policy: Some(AskForApproval::Never),

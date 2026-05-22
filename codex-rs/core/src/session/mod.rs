@@ -749,9 +749,15 @@ impl Codex {
         input: Vec<UserInput>,
         expected_turn_id: Option<&str>,
         responsesapi_client_metadata: Option<HashMap<String, String>>,
+        mcp_meta_by_server: Option<HashMap<String, HashMap<String, Value>>>,
     ) -> Result<String, SteerInputError> {
         self.session
-            .steer_input(input, expected_turn_id, responsesapi_client_metadata)
+            .steer_input(
+                input,
+                expected_turn_id,
+                responsesapi_client_metadata,
+                mcp_meta_by_server,
+            )
             .await
     }
 
@@ -1071,6 +1077,7 @@ impl Session {
                 }],
                 final_output_json_schema: None,
                 responsesapi_client_metadata: None,
+                mcp_meta_by_server: None,
                 thread_settings: Default::default(),
             },
             /*mirror_user_text_to_realtime*/ None,
@@ -3134,6 +3141,7 @@ impl Session {
         input: Vec<UserInput>,
         expected_turn_id: Option<&str>,
         responsesapi_client_metadata: Option<HashMap<String, String>>,
+        mcp_meta_by_server: Option<HashMap<String, HashMap<String, Value>>>,
     ) -> Result<String, SteerInputError> {
         let mut active = self.active_turn.lock().await;
         let Some(active_turn) = active.as_mut() else {
@@ -3179,6 +3187,14 @@ impl Session {
                 .turn_context
                 .turn_metadata_state
                 .set_responsesapi_client_metadata(responsesapi_client_metadata);
+        }
+        if let Some(mcp_meta_by_server) = mcp_meta_by_server
+            && let Some((_, active_task)) = active_turn.tasks.first()
+        {
+            active_task
+                .turn_context
+                .turn_metadata_state
+                .set_mcp_meta_by_server(mcp_meta_by_server);
         }
 
         self.input_queue

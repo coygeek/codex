@@ -53,6 +53,15 @@ pub struct TurnStartParams {
     #[experimental("turn/start.responsesapiClientMetadata")]
     #[ts(optional = nullable)]
     pub responsesapi_client_metadata: Option<HashMap<String, String>>,
+    /// Optional turn-scoped MCP request metadata keyed by configured MCP server name.
+    ///
+    /// Values are forwarded only to model-initiated tool calls for the
+    /// matching server. For aggregate servers such as `codex_apps`, one entry
+    /// applies to every tool routed through that server during the turn.
+    /// Codex-owned `_meta` fields take precedence.
+    #[experimental("turn/start.mcpMetaByServer")]
+    #[ts(optional = nullable)]
+    pub mcp_meta_by_server: Option<HashMap<String, HashMap<String, JsonValue>>>,
     /// Optional turn-scoped environments.
     ///
     /// Omitted uses the thread sticky environments. Empty disables

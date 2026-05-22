@@ -684,6 +684,7 @@ async fn review_history_surfaces_in_parent_session() {
             }],
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
+            mcp_meta_by_server: None,
             thread_settings: Default::default(),
         })
         .await

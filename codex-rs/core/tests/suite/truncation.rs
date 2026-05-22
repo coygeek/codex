@@ -523,6 +523,7 @@ async fn mcp_image_output_preserves_image_and_no_text_summary() -> Result<()> {
             environments: None,
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
+            mcp_meta_by_server: None,
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
                 cwd: Some(fixture.cwd.path().to_path_buf()),
                 approval_policy: Some(AskForApproval::Never),

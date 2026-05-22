@@ -631,6 +631,7 @@ impl Session {
                 sub_id,
                 session_configuration,
                 updates.final_output_json_schema,
+                updates.mcp_meta_by_server,
                 turn_environments,
             )
             .await)
@@ -651,6 +652,7 @@ impl Session {
         sub_id: String,
         session_configuration: SessionConfiguration,
         final_output_json_schema: Option<Option<Value>>,
+        mcp_meta_by_server: Option<HashMap<String, HashMap<String, Value>>>,
         turn_environments: ResolvedTurnEnvironments,
     ) -> Arc<TurnContext> {
         let primary_turn_environment = turn_environments.primary();
@@ -722,6 +724,11 @@ impl Session {
         if let Some(final_schema) = final_output_json_schema {
             turn_context.final_output_json_schema = final_schema;
         }
+        if let Some(mcp_meta_by_server) = mcp_meta_by_server {
+            turn_context
+                .turn_metadata_state
+                .set_mcp_meta_by_server(mcp_meta_by_server);
+        }
         let turn_context = Arc::new(turn_context);
         turn_context.turn_metadata_state.spawn_git_enrichment_task();
         turn_context
@@ -769,6 +776,7 @@ impl Session {
             sub_id,
             session_configuration,
             /*final_output_json_schema*/ None,
+            /*mcp_meta_by_server*/ None,
             turn_environments,
         )
         .await

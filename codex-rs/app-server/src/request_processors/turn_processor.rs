@@ -419,6 +419,7 @@ impl TurnRequestProcessor {
             environments: environment_selections,
             final_output_json_schema: params.output_schema,
             responsesapi_client_metadata: params.responsesapi_client_metadata,
+            mcp_meta_by_server: params.mcp_meta_by_server.map(Box::new),
             thread_settings,
         };
         let turn_id = self
@@ -752,6 +753,7 @@ impl TurnRequestProcessor {
                 mapped_items,
                 Some(&params.expected_turn_id),
                 params.responsesapi_client_metadata,
+                /*mcp_meta_by_server*/ None,
             )
             .await
             .map_err(|err| {

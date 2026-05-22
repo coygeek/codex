@@ -64,6 +64,7 @@ mv "${tmp_path}" "${payload_path}""#,
             }],
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
+            mcp_meta_by_server: None,
             thread_settings: Default::default(),
         })
         .await?;
