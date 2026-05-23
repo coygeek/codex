@@ -176,6 +176,25 @@ fn server_tool_search_output_without_call_is_allowed() {
 }
 
 #[test]
+fn completed_server_tool_search_flow_is_allowed() {
+    assert!(!has_unpaired_tool_flow(&[
+        ResponseItem::ToolSearchCall {
+            id: None,
+            call_id: Some("call-1".to_string()),
+            status: None,
+            execution: "server".to_string(),
+            arguments: serde_json::json!({}),
+        },
+        ResponseItem::ToolSearchOutput {
+            call_id: Some("call-1".to_string()),
+            status: "completed".to_string(),
+            execution: "server".to_string(),
+            tools: Vec::new(),
+        },
+    ]));
+}
+
+#[test]
 fn client_tool_search_output_without_call_is_suppressed() {
     assert!(has_unpaired_tool_flow(&[ResponseItem::ToolSearchOutput {
         call_id: Some("call-1".to_string()),

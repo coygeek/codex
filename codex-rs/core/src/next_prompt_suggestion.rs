@@ -40,7 +40,7 @@ use tokio_util::sync::CancellationToken;
 mod next_prompt_suggestion_tests;
 
 const NEXT_PROMPT_SUGGESTION_TOKEN_HEADROOM: i64 = 1_024;
-const NEXT_PROMPT_SUGGESTION_SAMPLE_TIMEOUT: Duration = Duration::from_secs(8);
+const NEXT_PROMPT_SUGGESTION_SAMPLE_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 8);
 
 #[derive(Clone, Copy)]
 struct HistorySnapshot {
@@ -104,39 +104,56 @@ pub(crate) async fn suggest_next_prompt(
     if !session_is_idle_for_suggestion(sess).await {
         return Ok(None);
     }
-    let mut client_session = sess.services.model_client.new_session();
-    let mut stream = match client_session
-        .stream(
-            &prompt,
-            &turn_context.model_info,
-            &turn_context.session_telemetry,
-            turn_context.reasoning_effort,
-            turn_context.reasoning_summary,
-            turn_context.config.service_tier.clone(),
-            /*turn_metadata_header*/ None,
-            &InferenceTraceContext::disabled(),
-        )
-        .or_cancel(&cancellation_token)
-        .await
-    {
-        Ok(Ok(stream)) => stream,
-        Ok(Err(err)) => {
-            tracing::debug!(
-                error = ?err,
-                "next prompt suggestion failed before sampling started"
-            );
-            return Ok(None);
-        }
-        Err(codex_async_utils::CancelErr::Cancelled) => {
-            tracing::debug!("next prompt suggestion canceled before sampling started");
-            return Ok(None);
+    let mut client_session = sess.services.model_client.new_uncached_session();
+    let sample_deadline = tokio::time::sleep(NEXT_PROMPT_SUGGESTION_SAMPLE_TIMEOUT);
+    tokio::pin!(sample_deadline);
+    let inference_trace = InferenceTraceContext::disabled();
+    let mut stream = {
+        let stream = client_session
+            .stream(
+                &prompt,
+                &turn_context.model_info,
+                &turn_context.session_telemetry,
+                turn_context.reasoning_effort,
+                turn_context.reasoning_summary,
+                turn_context.config.service_tier.clone(),
+                /*turn_metadata_header*/ None,
+                &inference_trace,
+            )
+            .or_cancel(&cancellation_token);
+        match tokio::select! {
+            result = stream => result,
+            _ = &mut sample_deadline => {
+                tracing::debug!("next prompt suggestion timed out before sampling started");
+                return Ok(None);
+            }
+        } {
+            Ok(Ok(stream)) => stream,
+            Ok(Err(err)) => {
+                tracing::debug!(
+                    error = ?err,
+                    "next prompt suggestion failed before sampling started"
+                );
+                return Ok(None);
+            }
+            Err(codex_async_utils::CancelErr::Cancelled) => {
+                tracing::debug!("next prompt suggestion canceled before sampling started");
+                return Ok(None);
+            }
         }
     };
+    if cancellation_token.is_cancelled() {
+        tracing::debug!("next prompt suggestion skipped after cancellation");
+        client_session.reset_websocket_session();
+        return Ok(None);
+    }
+    if !session_is_idle_for_suggestion(sess).await {
+        client_session.reset_websocket_session();
+        return Ok(None);
+    }
     let mut streamed_text = String::new();
     let mut completed_text = None;
     let mut latest_rate_limits = None;
-    let sample_deadline = tokio::time::sleep(NEXT_PROMPT_SUGGESTION_SAMPLE_TIMEOUT);
-    tokio::pin!(sample_deadline);
     let completed_response_id = loop {
         if !session_is_idle_for_suggestion(sess).await {
             client_session.reset_websocket_session();
@@ -151,7 +168,7 @@ pub(crate) async fn suggest_next_prompt(
                     return Ok(None);
                 }
             },
-            _ = tokio::time::sleep(Duration::from_millis(100)) => continue,
+            _ = tokio::time::sleep(Duration::from_millis(/*millis*/ 100)) => continue,
             _ = &mut sample_deadline => {
                 tracing::debug!("next prompt suggestion timed out while sampling");
                 client_session.reset_websocket_session();
@@ -202,15 +219,6 @@ pub(crate) async fn suggest_next_prompt(
                             }),
                         })
                         .await;
-                    } else {
-                        sess.send_event(
-                            &turn_context,
-                            EventMsg::TokenCount(TokenCountEvent {
-                                info: None,
-                                rate_limits: Some(rate_limits),
-                            }),
-                        )
-                        .await;
                     }
                 }
                 break response_id;
@@ -224,6 +232,10 @@ pub(crate) async fn suggest_next_prompt(
             .await;
     }
     client_session.reset_websocket_session();
+    if cancellation_token.is_cancelled() {
+        tracing::debug!("next prompt suggestion canceled after sampling completed");
+        return Ok(None);
+    }
     if !session_history_matches_snapshot(sess, history_snapshot).await {
         tracing::debug!("next prompt suggestion skipped after history changed");
         return Ok(None);
@@ -350,6 +362,7 @@ fn has_unpaired_tool_flow(items: &[ResponseItem]) -> bool {
     let mut custom_tool_outputs = HashSet::new();
     let mut tool_search_calls = HashSet::new();
     let mut tool_search_outputs = HashSet::new();
+    let mut client_tool_search_outputs = HashSet::new();
 
     for item in items {
         match item {
@@ -365,13 +378,17 @@ fn has_unpaired_tool_flow(items: &[ResponseItem]) -> bool {
             } => {
                 tool_search_calls.insert(call_id.clone());
             }
-            ResponseItem::ToolSearchOutput { execution, .. } if execution == "server" => {}
             ResponseItem::ToolSearchOutput {
                 call_id: Some(call_id),
+                execution,
                 ..
             } => {
                 tool_search_outputs.insert(call_id.clone());
+                if execution != "server" {
+                    client_tool_search_outputs.insert(call_id.clone());
+                }
             }
+            ResponseItem::ToolSearchOutput { execution, .. } if execution == "server" => {}
             ResponseItem::CustomToolCall { call_id, .. } => {
                 custom_tool_calls.insert(call_id.clone());
             }
@@ -400,7 +417,8 @@ fn has_unpaired_tool_flow(items: &[ResponseItem]) -> bool {
 
     function_calls != function_outputs
         || custom_tool_calls != custom_tool_outputs
-        || tool_search_calls != tool_search_outputs
+        || !tool_search_calls.is_subset(&tool_search_outputs)
+        || !client_tool_search_outputs.is_subset(&tool_search_calls)
 }
 
 /// Selects the fastest supported reasoning effort for an ephemeral suggestion sample.
