@@ -3442,16 +3442,7 @@ impl ThreadRequestProcessor {
         let mut items = Vec::with_capacity(requested_page_size);
         let mut next_cursor: Option<String> = None;
 
-        let model_provider_filter = match model_providers {
-            Some(providers) => {
-                if providers.is_empty() {
-                    None
-                } else {
-                    Some(providers)
-                }
-            }
-            None => Some(vec![self.config.model_provider_id.clone()]),
-        };
+        let model_provider_filter = model_providers.filter(|providers| !providers.is_empty());
         let (allowed_sources_vec, source_kind_filter) = compute_source_filters(source_kinds);
         let allowed_sources = allowed_sources_vec.as_slice();
         let store_sort_direction = match sort_direction {

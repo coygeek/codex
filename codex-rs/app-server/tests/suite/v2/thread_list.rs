@@ -325,6 +325,57 @@ stream_max_retries = 0
     )
 }
 
+fn create_app_provider_config(codex_home: &std::path::Path) -> std::io::Result<()> {
+    let config_toml = codex_home.join("config.toml");
+    std::fs::write(
+        config_toml,
+        r#"
+model = "mock-model"
+approval_policy = "never"
+suppress_unstable_features_warning = true
+
+model_provider = "app_provider"
+
+[features]
+sqlite = true
+
+[model_providers.app_provider]
+name = "App provider for test"
+base_url = "http://127.0.0.1:9/v1"
+wire_api = "responses"
+request_max_retries = 0
+stream_max_retries = 0
+"#,
+    )
+}
+
+async fn request_thread_list(
+    mcp: &mut McpProcess,
+    model_providers: Option<Vec<String>>,
+    search_term: Option<String>,
+) -> Result<ThreadListResponse> {
+    let request_id = mcp
+        .send_thread_list_request(codex_app_server_protocol::ThreadListParams {
+            cursor: None,
+            limit: Some(10),
+            sort_key: None,
+            sort_direction: None,
+            model_providers,
+            source_kinds: Some(vec![ThreadSourceKind::Cli]),
+            archived: None,
+            cwd: None,
+            use_state_db_only: false,
+            search_term,
+        })
+        .await?;
+    let resp: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(request_id)),
+    )
+    .await??;
+    to_response::<ThreadListResponse>(resp)
+}
+
 #[tokio::test]
 async fn thread_list_pagination_next_cursor_none_on_last_page() -> Result<()> {
     let codex_home = TempDir::new()?;
@@ -554,6 +605,104 @@ async fn thread_list_respects_cwd_filters() -> Result<()> {
     assert!(!filtered_ids.contains(&unfiltered_id.as_str()));
     assert_eq!(data[0].cwd.as_path(), second_target_cwd.as_path());
     assert_eq!(data[1].cwd.as_path(), first_target_cwd.as_path());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn thread_list_omitted_provider_includes_cli_sessions_from_all_providers() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    create_app_provider_config(codex_home.path())?;
+
+    let cli_id = create_fake_rollout(
+        codex_home.path(),
+        "2025-01-02T10-00-00",
+        "2025-01-02T10:00:00Z",
+        "codex cli history needle",
+        Some("cli_provider"),
+        /*git_info*/ None,
+    )?;
+    let app_provider_id = create_fake_rollout(
+        codex_home.path(),
+        "2025-01-02T11-00-00",
+        "2025-01-02T11:00:00Z",
+        "current app provider history",
+        Some("app_provider"),
+        /*git_info*/ None,
+    )?;
+
+    // `thread/list` applies `search_term` on the sqlite fast path. This fixture
+    // creates rollouts manually, so repair state once before exercising search.
+    let state_db =
+        codex_state::StateRuntime::init(codex_home.path().to_path_buf(), "app_provider".into())
+            .await?;
+    state_db
+        .mark_backfill_complete(/*last_watermark*/ None)
+        .await?;
+    let rollout_config = codex_rollout::RolloutConfig {
+        codex_home: codex_home.path().to_path_buf(),
+        sqlite_home: codex_home.path().to_path_buf(),
+        cwd: codex_home.path().to_path_buf(),
+        model_provider_id: "app_provider".to_string(),
+        generate_memories: false,
+    };
+    let repaired_page = codex_core::RolloutRecorder::list_threads(
+        Some(state_db),
+        &rollout_config,
+        /*page_size*/ 10,
+        /*cursor*/ None,
+        codex_core::ThreadSortKey::CreatedAt,
+        codex_core::SortDirection::Desc,
+        &[],
+        /*model_providers*/ None,
+        /*cwd_filters*/ None,
+        "app_provider",
+        /*search_term*/ None,
+    )
+    .await?;
+    assert_eq!(repaired_page.items.len(), 2);
+
+    let mut mcp = init_mcp(codex_home.path()).await?;
+
+    let all_provider_response = request_thread_list(
+        &mut mcp, /*model_providers*/ None, /*search_term*/ None,
+    )
+    .await?;
+    let all_provider_ids: Vec<_> = all_provider_response
+        .data
+        .iter()
+        .map(|thread| thread.id.as_str())
+        .collect();
+    assert_eq!(
+        all_provider_ids,
+        vec![app_provider_id.as_str(), cli_id.as_str()]
+    );
+
+    let search_response = request_thread_list(
+        &mut mcp,
+        /*model_providers*/ None,
+        Some("needle".to_string()),
+    )
+    .await?;
+    let search_ids: Vec<_> = search_response
+        .data
+        .iter()
+        .map(|thread| thread.id.as_str())
+        .collect();
+    assert_eq!(search_ids, vec![cli_id.as_str()]);
+
+    let app_provider_response = request_thread_list(
+        &mut mcp,
+        Some(vec!["app_provider".to_string()]),
+        /*search_term*/ None,
+    )
+    .await?;
+    let app_provider_ids: Vec<_> = app_provider_response
+        .data
+        .iter()
+        .map(|thread| thread.id.as_str())
+        .collect();
+    assert_eq!(app_provider_ids, vec![app_provider_id.as_str()]);
 
     Ok(())
 }
