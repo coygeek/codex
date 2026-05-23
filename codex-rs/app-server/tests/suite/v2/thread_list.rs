@@ -708,6 +708,71 @@ async fn thread_list_omitted_provider_includes_cli_sessions_from_all_providers()
 }
 
 #[tokio::test]
+async fn thread_list_desktop_empty_filters_include_cli_sessions_from_all_providers() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    create_app_provider_config(codex_home.path())?;
+
+    let cli_id = create_fake_rollout(
+        codex_home.path(),
+        "2025-01-02T10-00-00",
+        "2025-01-02T10:00:00Z",
+        "desktop empty sources cli history",
+        Some("cli_provider"),
+        /*git_info*/ None,
+    )?;
+    let app_provider_id = create_fake_rollout(
+        codex_home.path(),
+        "2025-01-02T11-00-00",
+        "2025-01-02T11:00:00Z",
+        "desktop empty sources app history",
+        Some("app_provider"),
+        /*git_info*/ None,
+    )?;
+    let exec_id = create_fake_rollout_with_source(
+        codex_home.path(),
+        "2025-01-02T12-00-00",
+        "2025-01-02T12:00:00Z",
+        "desktop empty sources exec history",
+        Some("cli_provider"),
+        /*git_info*/ None,
+        CoreSessionSource::Exec,
+    )?;
+
+    let mut mcp = init_mcp(codex_home.path()).await?;
+
+    let ThreadListResponse { data, .. } = {
+        let request_id = mcp
+            .send_thread_list_request(codex_app_server_protocol::ThreadListParams {
+                cursor: None,
+                limit: Some(50),
+                sort_key: Some(ThreadSortKey::UpdatedAt),
+                sort_direction: None,
+                model_providers: Some(Vec::new()),
+                source_kinds: Some(Vec::new()),
+                archived: Some(false),
+                cwd: None,
+                use_state_db_only: false,
+                search_term: None,
+            })
+            .await?;
+        let resp: JSONRPCResponse = timeout(
+            DEFAULT_READ_TIMEOUT,
+            mcp.read_stream_until_response_message(RequestId::Integer(request_id)),
+        )
+        .await??;
+        to_response::<ThreadListResponse>(resp)?
+    };
+
+    let ids: Vec<_> = data.iter().map(|thread| thread.id.as_str()).collect();
+    assert_eq!(ids, vec![app_provider_id.as_str(), cli_id.as_str()]);
+    assert!(!ids.contains(&exec_id.as_str()));
+    assert_eq!(data[0].source, SessionSource::Cli);
+    assert_eq!(data[1].source, SessionSource::Cli);
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn thread_list_respects_search_term_filter() -> Result<()> {
     let codex_home = TempDir::new()?;
     std::fs::write(
