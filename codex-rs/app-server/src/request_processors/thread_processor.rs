@@ -3442,8 +3442,17 @@ impl ThreadRequestProcessor {
         let mut items = Vec::with_capacity(requested_page_size);
         let mut next_cursor: Option<String> = None;
 
-        let model_provider_filter = model_providers.filter(|providers| !providers.is_empty());
         let (allowed_sources_vec, source_kind_filter) = compute_source_filters(source_kinds);
+        let source_filter_requires_post_filter =
+            source_kind_filter.is_some() && allowed_sources_vec.is_empty();
+        // `Some([])` still means all providers, but keeps filesystem scan/repair active when
+        // source filtering can only happen after the store returns candidate threads.
+        let model_provider_filter = match model_providers {
+            Some(providers) if providers.is_empty() && !source_filter_requires_post_filter => None,
+            Some(providers) => Some(providers),
+            None if source_filter_requires_post_filter => Some(Vec::new()),
+            None => None,
+        };
         let allowed_sources = allowed_sources_vec.as_slice();
         let store_sort_direction = match sort_direction {
             SortDirection::Asc => StoreSortDirection::Asc,

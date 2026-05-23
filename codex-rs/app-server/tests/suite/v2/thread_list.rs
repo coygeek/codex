@@ -773,6 +773,89 @@ async fn thread_list_desktop_empty_filters_include_cli_sessions_from_all_provide
 }
 
 #[tokio::test]
+async fn thread_list_omitted_provider_repairs_post_filtered_source_rollouts() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    create_app_provider_config(codex_home.path())?;
+
+    let cli_id = create_fake_rollout(
+        codex_home.path(),
+        "2025-01-02T10-00-00",
+        "2025-01-02T10:00:00Z",
+        "post filter cli history",
+        Some("cli_provider"),
+        /*git_info*/ None,
+    )?;
+    let exec_id = create_fake_rollout_with_source(
+        codex_home.path(),
+        "2025-01-02T11-00-00",
+        "2025-01-02T11:00:00Z",
+        "post filter exec history",
+        Some("cli_provider"),
+        /*git_info*/ None,
+        CoreSessionSource::Exec,
+    )?;
+    let review_id = create_fake_rollout_with_source(
+        codex_home.path(),
+        "2025-01-02T12-00-00",
+        "2025-01-02T12:00:00Z",
+        "post filter review history",
+        Some("cli_provider"),
+        /*git_info*/ None,
+        CoreSessionSource::SubAgent(SubAgentSource::Review),
+    )?;
+
+    let state_db =
+        codex_state::StateRuntime::init(codex_home.path().to_path_buf(), "app_provider".into())
+            .await?;
+    state_db
+        .mark_backfill_complete(/*last_watermark*/ None)
+        .await?;
+
+    let mut mcp = init_mcp(codex_home.path()).await?;
+
+    let exec_response = list_threads(
+        &mut mcp,
+        /*cursor*/ None,
+        Some(10),
+        /*providers*/ None,
+        Some(vec![ThreadSourceKind::Exec]),
+        /*archived*/ None,
+    )
+    .await?;
+    let exec_ids: Vec<_> = exec_response
+        .data
+        .iter()
+        .map(|thread| thread.id.as_str())
+        .collect();
+    assert_eq!(exec_ids, vec![exec_id.as_str()]);
+    assert!(!exec_ids.contains(&cli_id.as_str()));
+    assert_eq!(exec_response.data[0].source, SessionSource::Exec);
+
+    let review_response = list_threads(
+        &mut mcp,
+        /*cursor*/ None,
+        Some(10),
+        /*providers*/ None,
+        Some(vec![ThreadSourceKind::SubAgentReview]),
+        /*archived*/ None,
+    )
+    .await?;
+    let review_ids: Vec<_> = review_response
+        .data
+        .iter()
+        .map(|thread| thread.id.as_str())
+        .collect();
+    assert_eq!(review_ids, vec![review_id.as_str()]);
+    assert!(!review_ids.contains(&cli_id.as_str()));
+    assert!(matches!(
+        review_response.data[0].source,
+        SessionSource::SubAgent(_)
+    ));
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn thread_list_respects_search_term_filter() -> Result<()> {
     let codex_home = TempDir::new()?;
     std::fs::write(
